@@ -1,0 +1,34 @@
+{
+  "name": "FavoriteProduct",
+  "type": "object",
+  "properties": {
+    "product_name": {
+      "type": "string",
+      "description": "Name of the product"
+    },
+    "price": {
+      "type": "string",
+      "description": "Product price"
+    },
+    "description": {
+      "type": "string",
+      "description": "Product description"
+    },
+    "image_url": {
+      "type": "string",
+      "description": "Product image URL"
+    },
+    "product_url": {
+      "type": "string",
+      "description": "URL to view/buy the product"
+    },
+    "rating": {
+      "type": "number",
+      "description": "Product rating out of 5"
+    }
+  },
+  "required": [
+    "product_name",
+    "product_url"
+  ]
+}
