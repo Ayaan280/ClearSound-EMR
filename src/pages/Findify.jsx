@@ -7,7 +7,6 @@ import { format } from "date-fns";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import FavoriteButton from "../components/FavoriteButton";
-import { base44 } from "@/api/base44Client";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import {
@@ -18,6 +17,20 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const MAX_QUESTIONS = 15;
+
+const AI_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/findify-ai`;
+const callAI = async (action, payload, session) => {
+  const res = await fetch(AI_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      "Apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ action, payload }),
+  });
+  return res.json();
+};
 
 function MessageBubble({ message, isUser }) {
   return (
@@ -425,36 +438,12 @@ export default function Findify() {
       .map((m) => `${m.isUser ? "User" : "Assistant"}: ${m.text}`)
       .join("\n");
 
-    const aiDecision = await base44.integrations.Core.InvokeLLM({
-      prompt: `You are Findify, a smart AI shopping assistant. Your job is to gather enough info to recommend products, but NEVER ask about something the user already told you.
-
-CONVERSATION SO FAR:
-${conversationHistory}
-
-QUESTIONS ASKED SO FAR: ${questionCount}
-MAX QUESTIONS ALLOWED: ${MAX_QUESTIONS}
-
-Analyze what the user already told you and decide:
-1. Do you have ENOUGH info to recommend products? (you need at minimum: product type AND budget)
-2. If not, what is the SINGLE most important missing piece of info? Do NOT ask about anything already mentioned.
-
-Rules:
-- ALWAYS ask for budget if not mentioned yet — do not set ready=true without knowing the budget
-- If the user's first message already contains lots of detail (brand, type, features), you may only need 1 more question (budget)
-- NEVER repeat or re-ask anything the user already mentioned
-- Be friendly, use emojis
-- If you've asked ${MAX_QUESTIONS} questions already, always set ready=true
-
-Return your decision.`,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          ready: { type: "boolean" },
-          next_question: { type: "string" },
-          collected_info: { type: "object" }
-        }
-      }
-    });
+    const { data: { session } } = await supabase.auth.getSession();
+    const aiDecision = await callAI("chat_decision", {
+      conversationHistory,
+      questionCount,
+      maxQuestions: MAX_QUESTIONS,
+    }, session);
 
     if (aiDecision.ready || questionCount >= MAX_QUESTIONS) {
       const finalMessages = [...newMessages, {
@@ -491,44 +480,9 @@ CRITICAL RULES:
 
 Return 3 specific, real product recommendations with current market data.`;
 
-    const productData = await base44.integrations.Core.InvokeLLM({
-      prompt,
-      add_context_from_internet: true,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          products: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                name: { type: "string" },
-                price: { type: "string" },
-                description: { type: "string" },
-                rating: { type: "number" },
-                features: { type: "array", items: { type: "string" } },
-                budget_matched: { type: "boolean" },
-                budget_note: { type: "string" },
-                image_prompt: { type: "string" }
-              }
-            }
-          }
-        }
-      }
-    });
-
-    const productsWithImages = await Promise.all(
-      productData.products.map(async (product) => {
-        const imageResult = await base44.integrations.Core.GenerateImage({
-          prompt: product.image_prompt || `Professional product photography of ${product.name}, clean white background, studio lighting`
-        });
-        return {
-          ...product,
-          image_url: imageResult.url,
-          search_url: `https://www.google.com/search?q=${encodeURIComponent(product.name + " buy")}`
-        };
-      })
-    );
+    const { data: { session } } = await supabase.auth.getSession();
+    const productData = await callAI("recommend_products", { conversationHistory: prompt }, session);
+    const productsWithImages = productData.products || [];
 
     setProducts(productsWithImages);
     setFlowComplete(true);

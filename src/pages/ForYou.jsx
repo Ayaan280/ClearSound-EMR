@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import FavoriteButton from "../components/FavoriteButton";
-import { base44 } from "@/api/base44Client";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 
@@ -83,6 +82,20 @@ function ProductRecommendationCard({ product, user }) {
   );
 }
 
+const AI_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/findify-ai`;
+const callAI = async (action, payload, session) => {
+  const res = await fetch(AI_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      "Apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ action, payload }),
+  });
+  return res.json();
+};
+
 export default function ForYou() {
   const [recommendations, setRecommendations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -115,55 +128,9 @@ export default function ForYou() {
           `Search ${i + 1}:\n- Product: ${h.product_type}\n- Preferences: ${JSON.stringify(h.answers)}\n- Recommended: ${h.recommended_product?.name || 'N/A'}`
         ).join('\n\n');
 
-        const recommendationsData = await base44.integrations.Core.InvokeLLM({
-          prompt: `You are a personalized shopping assistant. Analyze this user's search history and recommend 6 new products they might love based on their preferences, budget range, and interests.
-
-User's Search History:
-${historyText}
-
-Generate 6 diverse product recommendations that match their style and preferences. Include products they haven't searched for yet but would likely enjoy based on patterns in their history.
-
-For each product:
-- Find real, specific products with current market data
-- Explain why it matches their preferences
-- Include realistic pricing
-- Vary the product types to show diversity`,
-          add_context_from_internet: true,
-          response_json_schema: {
-            type: "object",
-            properties: {
-              recommendations: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    name: { type: "string" },
-                    price: { type: "string" },
-                    description: { type: "string" },
-                    rating: { type: "number" },
-                    why_recommended: { type: "string" },
-                    image_prompt: { type: "string" }
-                  }
-                }
-              }
-            }
-          }
-        });
-
-        const productsWithImages = await Promise.all(
-          recommendationsData.recommendations.map(async (product) => {
-            const imageResult = await base44.integrations.Core.GenerateImage({
-              prompt: product.image_prompt || `Professional product photography of ${product.name}, clean white background, studio lighting`
-            });
-            return {
-              ...product,
-              image_url: imageResult.url,
-              search_url: `https://www.google.com/search?q=${encodeURIComponent(product.name + " buy")}`
-            };
-          })
-        );
-
-        setRecommendations(productsWithImages);
+        const { data: { session } } = await supabase.auth.getSession();
+        const recData = await callAI("for_you_recommendations", { historyText }, session);
+        setRecommendations(recData.recommendations || []);
       } catch (e) {
         console.error("Failed to load recommendations:", e);
         setError("failed");

@@ -142,7 +142,7 @@ export default function Signup() {
         className="w-full max-w-md"
       >
         <div className="text-center mb-8">
-          <div className="inline-flex h-16 w-16 rounded-3xl bg-gradient-to-br from-slate-700 to-slate-900 items-center justify-center shadow-xl shadow-slate-400/30 mb-4">
+          <div className="inline-flex h-16 w-16 rounded-3xl bg-gradient-to-br from-purple-600 to-violet-700 items-center justify-center shadow-xl shadow-purple-300/50 mb-4">
             <Sparkles className="h-8 w-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Create an account</h1>
