@@ -6,6 +6,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import FavoriteButton from "../components/FavoriteButton";
 import { base44 } from "@/api/base44Client";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 
 function ProductRecommendationCard({ product, user }) {
@@ -97,7 +98,12 @@ export default function ForYou() {
       }
 
       try {
-        const history = await base44.entities.SearchHistory.list("-created_date", 20);
+        const { data: history } = await supabase
+          .from("search_history")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(20);
+        if (!history) throw new Error("Failed to load history");
 
         if (history.length === 0) {
           setError("no_history");

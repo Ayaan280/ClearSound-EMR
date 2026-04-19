@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, RotateCcw, History, User, Send, Search, ExternalLink, Star, Loader2, Package, Calendar, DollarSign, X, CircleDot, Heart, Bookmark } from "lucide-react";
+import { Sparkles, RotateCcw, History, User, Send, ExternalLink, Star, Loader2, Package, Calendar, X, Heart, Bookmark } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -8,6 +8,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import FavoriteButton from "../components/FavoriteButton";
 import { base44 } from "@/api/base44Client";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import {
   DropdownMenu,
@@ -235,8 +236,12 @@ function HistoryModal({ onClose }) {
   useEffect(() => {
     const loadHistory = async () => {
       try {
-        const searches = await base44.entities.SearchHistory.list("-created_date", 50);
-        setHistory(searches);
+        const { data: searches } = await supabase
+          .from("search_history")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(50);
+        setHistory(searches || []);
       } catch (e) {
         console.log("Failed to load history:", e);
       } finally {
@@ -342,7 +347,7 @@ function HistoryModal({ onClose }) {
                       </h3>
                       <div className="flex items-center gap-2 mt-1 text-xs text-slate-400">
                         <Calendar className="h-3 w-3" />
-                        {format(new Date(item.created_date), "MMM d, yyyy 'at' h:mm a")}
+                        {format(new Date(item.created_at), "MMM d, yyyy 'at' h:mm a")}
                       </div>
                     </div>
                     {!item.budget_matched && (
@@ -529,9 +534,10 @@ Return 3 specific, real product recommendations with current market data.`;
     setFlowComplete(true);
     setIsLoadingProduct(false);
 
-    if (isAuthenticated) {
+    if (isAuthenticated && user) {
       try {
-        await base44.entities.SearchHistory.create({
+        await supabase.from("search_history").insert({
+          user_id: user.id,
           product_type: (msgs || messages).find(m => m.isUser)?.text || "Product Search",
           answers: answers,
           recommended_product: productsWithImages[0],

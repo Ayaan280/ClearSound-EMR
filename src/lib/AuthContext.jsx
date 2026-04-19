@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { supabase } from '@/lib/supabase';
 
 const AuthContext = createContext();
 
@@ -9,43 +9,51 @@ export const AuthProvider = ({ children }) => {
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
   useEffect(() => {
-    checkAuth();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setIsAuthenticated(!!session?.user);
+      setIsLoadingAuth(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user ?? null);
+      setIsAuthenticated(!!session?.user);
+      setIsLoadingAuth(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const checkAuth = async () => {
-    try {
-      setIsLoadingAuth(true);
-      const currentUser = await base44.auth.me();
-      setUser(currentUser);
-      setIsAuthenticated(true);
-    } catch {
-      setUser(null);
-      setIsAuthenticated(false);
-    } finally {
-      setIsLoadingAuth(false);
-    }
-  };
-
   const login = async (email, password) => {
-    const result = await base44.auth.loginViaEmailPassword(email, password);
-    if (result.access_token) {
-      const currentUser = await base44.auth.me();
-      setUser(currentUser);
-      setIsAuthenticated(true);
-    }
-    return result;
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    return data;
   };
 
   const signup = async (email, password, fullName) => {
-    const result = await base44.auth.register({ email, password, full_name: fullName });
-    return result;
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: fullName },
+      },
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  const verifyOtp = async (email, token) => {
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: 'email',
+    });
+    if (error) throw error;
+    return data;
   };
 
   const logout = async () => {
-    try {
-      await base44.auth.logout();
-    } catch {
-    }
+    await supabase.auth.signOut();
     setUser(null);
     setIsAuthenticated(false);
   };
@@ -57,8 +65,8 @@ export const AuthProvider = ({ children }) => {
       isLoadingAuth,
       login,
       signup,
+      verifyOtp,
       logout,
-      checkAuth,
     }}>
       {children}
     </AuthContext.Provider>

@@ -4,7 +4,7 @@ import { Heart, ArrowLeft, Loader2, ExternalLink, Star, Trash2 } from "lucide-re
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { base44 } from "@/api/base44Client";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 
 function FavoriteCard({ favorite, onRemove }) {
@@ -97,8 +97,12 @@ export default function MyFavorites() {
       }
 
       try {
-        const userFavorites = await base44.entities.FavoriteProduct.list("-created_date", 100);
-        setFavorites(userFavorites);
+        const { data: userFavorites } = await supabase
+          .from("favorite_products")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(100);
+        setFavorites(userFavorites || []);
       } catch (e) {
         console.error("Failed to load favorites:", e);
       } finally {
@@ -110,7 +114,7 @@ export default function MyFavorites() {
   }, [isAuthenticated]);
 
   const handleRemove = async (id) => {
-    await base44.entities.FavoriteProduct.delete(id);
+    await supabase.from("favorite_products").delete().eq("id", id);
     setFavorites(favorites.filter(f => f.id !== id));
   };
 

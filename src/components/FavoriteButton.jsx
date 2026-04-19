@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { base44 } from "@/api/base44Client";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { useNavigate } from "react-router-dom";
 
@@ -9,31 +9,28 @@ export default function FavoriteButton({ product, className = "" }) {
   const [isFavorited, setIsFavorited] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [favoriteId, setFavoriteId] = useState(null);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     const checkFavorite = async () => {
-      if (!isAuthenticated || !product?.name) return;
+      if (!isAuthenticated || !user || !product?.name) return;
 
-      try {
-        const favorites = await base44.entities.FavoriteProduct.filter(
-          { product_name: product.name },
-          "-created_date",
-          1
-        );
+      const { data } = await supabase
+        .from("favorite_products")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("product_name", product.name)
+        .maybeSingle();
 
-        if (favorites.length > 0) {
-          setIsFavorited(true);
-          setFavoriteId(favorites[0].id);
-        }
-      } catch (e) {
-        console.log("Failed to check favorite:", e);
+      if (data) {
+        setIsFavorited(true);
+        setFavoriteId(data.id);
       }
     };
 
     checkFavorite();
-  }, [isAuthenticated, product?.name]);
+  }, [isAuthenticated, user, product?.name]);
 
   const handleToggleFavorite = async (e) => {
     e.preventDefault();
@@ -48,20 +45,25 @@ export default function FavoriteButton({ product, className = "" }) {
 
     try {
       if (isFavorited && favoriteId) {
-        await base44.entities.FavoriteProduct.delete(favoriteId);
+        await supabase.from("favorite_products").delete().eq("id", favoriteId);
         setIsFavorited(false);
         setFavoriteId(null);
       } else {
-        const newFavorite = await base44.entities.FavoriteProduct.create({
-          product_name: product.name,
-          price: product.price,
-          description: product.description,
-          image_url: product.image_url,
-          product_url: product.search_url || `https://www.google.com/search?q=${encodeURIComponent(product.name)}`,
-          rating: product.rating
-        });
+        const { data } = await supabase
+          .from("favorite_products")
+          .insert({
+            user_id: user.id,
+            product_name: product.name,
+            price: product.price || "",
+            description: product.description || "",
+            image_url: product.image_url || "",
+            product_url: product.search_url || `https://www.google.com/search?q=${encodeURIComponent(product.name)}`,
+            rating: product.rating || 0,
+          })
+          .select("id")
+          .single();
         setIsFavorited(true);
-        setFavoriteId(newFavorite.id);
+        setFavoriteId(data?.id);
       }
     } catch (e) {
       console.log("Failed to toggle favorite:", e);
